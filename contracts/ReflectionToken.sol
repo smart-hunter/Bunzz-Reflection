@@ -59,8 +59,8 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
     uint256 private _tFeeTotal;
     uint256 private _maxFee;
 
-    string private _name;
-    string private _symbol;
+    string private _name = "ReflectionToken";
+    string private _symbol = "RT";
     uint8 private _decimals;
 
     FeeTier public _defaultFees;
@@ -149,15 +149,15 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
     event SwapAndEvolveEnabledUpdated(bool enabled);
     event SwapAndEvolve(uint256 bnbSwapped, uint256 tokenReceived, uint256 bnbIntoLiquidity);
 
-    function initialize(address _router) public initializer {
+    function initialize(address _router, string memory __name, string memory __symbol) public initializer {
         __Context_init_unchained();
         __Ownable_init_unchained();
-        __ReflectionToken_v2_init_unchained(_router);
+        __ReflectionToken_v2_init_unchained(_router, __name, __symbol);
     }
 
-    function __ReflectionToken_v2_init_unchained(address _router) internal initializer {
-        _name = "";
-        _symbol = "SFM";
+    function __ReflectionToken_v2_init_unchained(address _router, string memory __name, string memory __symbol) internal initializer {
+        _name = __name;
+        _symbol = __symbol;
         _decimals = 9;
 
         _tTotal = 1000000 * 10**6 * 10**9;
