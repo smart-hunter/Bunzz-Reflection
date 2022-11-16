@@ -51,8 +51,6 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
     mapping(address => bool) private _isBlacklisted;
     mapping(address => uint256) private _accountsTier;
 
-    address[] private _excluded;
-
     uint256 private constant MAX = ~uint256(0);
     uint256 private _tTotal;
     uint256 private _rTotal;
@@ -304,24 +302,16 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         }
 
         _isExcluded[account] = true;
-        _excluded.push(account);
     }
 
     // we update _rTotalExcluded and _tTotalExcluded when add, remove wallet from excluded list
     // or when increase, decrease exclude value
     function includeInReward(address account) external onlyOwner {
         require(_isExcluded[account], "Account is already included");
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            if (_excluded[i] == account) {
-                _excluded[i] = _excluded[_excluded.length - 1];
-                _tTotalExcluded = _tTotalExcluded - _tOwned[account];
-                _rTotalExcluded = _rTotalExcluded - _rOwned[account];
-                _tOwned[account] = 0;
-                _isExcluded[account] = false;
-                _excluded.pop();
-                break;
-            }
-        }
+        _tTotalExcluded = _tTotalExcluded - _tOwned[account];
+        _rTotalExcluded = _rTotalExcluded - _rOwned[account];
+        _tOwned[account] = 0;
+        _isExcluded[account] = false;
     }
 
     function excludeFromFee(address account) public onlyOwner {
@@ -736,7 +726,7 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         uint256 swapeedToken = newBalance - initialBalance;
 
         _approve(msg.sender, address(this), swapeedToken);
-        IReflectionToken(address(this)).transferFrom(msg.sender, address(this), swapeedToken);
+        require(IReflectionToken(address(this)).transferFrom(msg.sender, address(this), swapeedToken), "transferFrom is failed");
         // add liquidity to uniswap
         addLiquidity(swapeedToken, otherHalf);
         emit SwapAndEvolve(half, swapeedToken, otherHalf);
@@ -952,7 +942,7 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
     }
 
     function withdrawToken(address _token, uint256 _amount) public onlyOwner {
-        IReflectionToken(_token).transfer(msg.sender, _amount);
+        require(IReflectionToken(_token).transfer(msg.sender, _amount), "transfer is failed");
     }
 
     function setNumberOfTokenToCollectBNB(uint256 _numToken) public onlyOwner {
