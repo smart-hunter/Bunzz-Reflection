@@ -551,8 +551,6 @@ constructor:
     }
 ```
 
-
-
 ## State Variables
 struct type
 ```
