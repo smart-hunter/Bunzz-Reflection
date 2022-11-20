@@ -150,7 +150,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         // swapAndLiquifyEnabled = true;
 
         maxTxAmount = 5000 * 10**6 * 10**9;
-//        _numTokensSellToAddToLiquidity = 500 * 10**6 * 10**9;
+        // _numTokensSellToAddToLiquidity = 500 * 10**6 * 10**9;
 
         burnAddress = 0x000000000000000000000000000000000000dEaD;
 
@@ -803,10 +803,6 @@ contract ReflectionToken is IReflectionToken, Ownable {
         return _isExcluded[account];
     }
 
-    function totalFees() public view returns (uint256) {
-        return _tFeeTotal;
-    }
-
     function reflectionFromTokenInTiers(
         uint256 tAmount,
         uint256 _tierIndex,
@@ -832,20 +828,28 @@ contract ReflectionToken is IReflectionToken, Ownable {
         return rAmount / currentRate;
     }
 
-    function accountTier(address _account) public view returns (FeeTier memory) {
-        return _feeTiers[_accountsTier[_account]];
+    function totalFees() public view returns (uint256) {
+        return _tFeeTotal;
     }
 
-    function isWhitelisted(address _account) public view returns (bool) {
-        return _accountsTier[_account] > 0;
+    function accountTier(address _account) public view returns (FeeTier memory) {
+        return _feeTiers[_accountsTier[_account]];
     }
 
     function feeTier(uint256 _tierIndex) public view checkTierIndex(_tierIndex) returns (FeeTier memory) {
         return _feeTiers[_tierIndex];
     }
 
+    function feeTiersLength() public view returns (uint256) {
+        return _feeTiers.length;
+    }
+
     function isExcludedFromFee(address account) public view returns (bool) {
         return _isExcludedFromFee[account];
+    }
+
+    function isWhitelisted(address _account) public view returns (bool) {
+        return _accountsTier[_account] > 0;
     }
 
     function isBlacklisted(address account) public view returns (bool) {
@@ -854,10 +858,6 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     function isMigrationStarted() external view override returns (bool) {
         return migration != address(0);
-    }
-
-    function feeTiersLength() public view returns (uint256) {
-        return _feeTiers.length;
     }
 
     function getContractBalance() public view returns (uint256) {
