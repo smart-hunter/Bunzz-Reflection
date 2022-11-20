@@ -68,12 +68,12 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     IUniswapV2Router02 public uniswapV2Router;
     address public uniswapV2Pair;
-    address public WBNB;
+    address public WETH;
     address public migration;
     address public burnAddress;
 
-    uint256 public numTokensToCollectBNB;
-    uint256 public numOfBnbToSwapAndEvolve;
+    uint256 public numTokensToCollectETH;
+    uint256 public numOfETHToSwapAndEvolve;
 
     uint256 public maxTxAmount;
 //    uint256 private _numTokensSellToAddToLiquidity;
@@ -87,7 +87,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     //    bool public swapAndLiquifyEnabled;
     bool private _upgraded;
 
-    bool inSwapAndEvolve;
+//    bool inSwapAndEvolve;
     bool public swapAndEvolveEnabled;
 
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
@@ -134,7 +134,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     }
 
     event SwapAndEvolveEnabledUpdated(bool enabled);
-    event SwapAndEvolve(uint256 bnbSwapped, uint256 tokenReceived, uint256 bnbIntoLiquidity);
+    event SwapAndEvolve(uint256 ethSwapped, uint256 tokenReceived, uint256 ethIntoLiquidity);
 
     constructor(address _router, string memory __name, string memory __symbol) {
         _name = __name;
@@ -155,9 +155,9 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _rOwned[owner()] = _rTotal;
 
         uniswapV2Router = IUniswapV2Router02(_router);
-        WBNB = uniswapV2Router.WETH();
+        WETH = uniswapV2Router.WETH();
         // Create a uniswap pair for this new token
-        uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory()).createPair(address(this), WBNB);
+        uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory()).createPair(address(this), WETH);
 
         //exclude owner and this contract from fee
         _isExcludedFromFee[owner()] = true;
@@ -418,28 +418,28 @@ contract ReflectionToken is IReflectionToken, Ownable {
     function updateRouterAndPair(address _uniswapV2Router, address _uniswapV2Pair) public onlyOwner {
         uniswapV2Router = IUniswapV2Router02(_uniswapV2Router);
         uniswapV2Pair = _uniswapV2Pair;
-        WBNB = uniswapV2Router.WETH();
+        WETH = uniswapV2Router.WETH();
     }
 
     function swapAndEvolve() public onlyOwner lockTheSwap {
         // split the contract balance into halves
-        uint256 contractBnbBalance = address(this).balance;
-        require(contractBnbBalance >= numOfBnbToSwapAndEvolve, "BNB balance is not reach for S&E Threshold");
+        uint256 contractETHBalance = address(this).balance;
+        require(contractETHBalance >= numOfETHToSwapAndEvolve, "ETH balance is not reach for S&E Threshold");
 
-        contractBnbBalance = numOfBnbToSwapAndEvolve;
+        contractETHBalance = numOfETHToSwapAndEvolve;
 
-        uint256 half = contractBnbBalance / 2;
-        uint256 otherHalf = contractBnbBalance - half;
+        uint256 half = contractETHBalance / 2;
+        uint256 otherHalf = contractETHBalance - half;
 
-        // capture the contract's current BNB balance.
-        // this is so that we can capture exactly the amount of BNB that the
-        // swap creates, and not make the liquidity event include any BNB that
+        // capture the contract's current ETH balance.
+        // this is so that we can capture exactly the amount of ETH that the
+        // swap creates, and not make the liquidity event include any ETH that
         // has been manually sent to the contract
         uint256 initialBalance = IReflectionToken(address(this)).balanceOf(msg.sender);
-        // swap BNB for Tokens
-        _swapBnbForTokens(half);
+        // swap ETH for Tokens
+        _swapETHForTokens(half);
 
-        // how much BNB did we just swap into?
+        // how much ETH did we just swap into?
         uint256 newBalance = IReflectionToken(address(this)).balanceOf(msg.sender);
         uint256 swapeedToken = newBalance - initialBalance;
 
@@ -461,12 +461,12 @@ contract ReflectionToken is IReflectionToken, Ownable {
         excludeFromReward(_newBurnAddress);
     }
 
-    function setNumberOfTokenToCollectBNB(uint256 _numToken) public onlyOwner {
-        numTokensToCollectBNB = _numToken;
+    function setNumberOfTokenToCollectETH(uint256 _numToken) public onlyOwner {
+        numTokensToCollectETH = _numToken;
     }
 
-    function setNumOfBnbToSwapAndEvolve(uint256 _numBnb) public onlyOwner {
-        numOfBnbToSwapAndEvolve = _numBnb;
+    function setNumOfETHToSwapAndEvolve(uint256 _numETH) public onlyOwner {
+        numOfETHToSwapAndEvolve = _numETH;
     }
 
     // withdraw functions
@@ -475,7 +475,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         require(IReflectionToken(_token).transfer(msg.sender, _amount), "transfer is failed");
     }
 
-    function withdrawBnb(uint256 _amount) public onlyOwner {
+    function withdrawETH(uint256 _amount) public onlyOwner {
         payable(msg.sender).transfer(_amount);
     }
 
@@ -558,10 +558,10 @@ contract ReflectionToken is IReflectionToken, Ownable {
             contractTokenBalance = maxTxAmount;
         }
 
-        bool overMinTokenBalance = contractTokenBalance >= numTokensToCollectBNB;
+        bool overMinTokenBalance = contractTokenBalance >= numTokensToCollectETH;
         if (overMinTokenBalance && !inSwapAndLiquify && from != uniswapV2Pair && swapAndEvolveEnabled) {
-            contractTokenBalance = numTokensToCollectBNB;
-            _collectBNB(contractTokenBalance);
+            contractTokenBalance = numTokensToCollectETH;
+            _collectETH(contractTokenBalance);
         }
 
         //indicates if fee should be deducted from transfer
@@ -586,12 +586,12 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _tokenTransfer(from, to, amount, tierIndex, takeFee);
     }
 
-    function _collectBNB(uint256 contractTokenBalance) private lockTheSwap {
-        _swapTokensForBnb(contractTokenBalance);
+    function _collectETH(uint256 contractTokenBalance) private lockTheSwap {
+        _swapTokensForETH(contractTokenBalance);
     }
 
-    function _swapTokensForBnb(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> wbnb
+    function _swapTokensForETH(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(this);
         path[1] = uniswapV2Router.WETH();
@@ -601,21 +601,21 @@ contract ReflectionToken is IReflectionToken, Ownable {
         // make the swap
         uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
-            0, // accept any amount of BNB
+            0, // accept any amount of ETH
             path,
             address(this),
             block.timestamp
         );
     }
 
-    function _swapBnbForTokens(uint256 bnbAmount) private {
-        // generate the uniswap pair path of token -> wbnb
+    function _swapETHForTokens(uint256 ethAmount) private {
+        // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = uniswapV2Router.WETH();
         path[1] = address(this);
-        _approve(owner(), address(uniswapV2Router), bnbAmount);
+        _approve(owner(), address(uniswapV2Router), ethAmount);
         // make the swap
-        uniswapV2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{ value: bnbAmount }(
+        uniswapV2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{ value: ethAmount }(
             0, // accept any amount of Token
             path,
             owner(),
@@ -623,12 +623,12 @@ contract ReflectionToken is IReflectionToken, Ownable {
         );
     }
 
-    function _addLiquidity(uint256 tokenAmount, uint256 bnbAmount) private {
+    function _addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         // approve token transfer to cover all possible scenarios
         _approve(address(this), address(uniswapV2Router), tokenAmount);
 
         // add the liquidity
-        uniswapV2Router.addLiquidityETH{ value: bnbAmount }(
+        uniswapV2Router.addLiquidityETH{ value: ethAmount }(
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
@@ -860,7 +860,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         return balanceOf(address(this));
     }
 
-    function getBNBBalance() public view returns (uint256) {
+    function getETHBalance() public view returns (uint256) {
         return address(this).balance;
     }
 
@@ -965,6 +965,6 @@ contract ReflectionToken is IReflectionToken, Ownable {
         require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
     }
 
-    //to receive BNB from uniswapV2Router when swapping
+    //to receive ETH from uniswapV2Router when swapping
     receive() external payable {}
 }
