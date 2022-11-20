@@ -7,10 +7,10 @@ import "./interfaces/IUniswapV2Factory.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 
-import "./libs/Initializable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
-
-contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable, OwnableUpgradeable {
+contract ReflectionToken is IReflectionToken, Ownable {
 
     struct FeeTier {
         uint256 ecoSystemFee;
@@ -58,7 +58,7 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
     uint256 private _maxFee;
 
     string private _name = "ReflectionToken";
-    string private _symbol = "RT";
+    string private _symbol = "RFT";
     uint8 private _decimals;
 
     FeeTier public _defaultFees;
@@ -147,13 +147,7 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
     event SwapAndEvolveEnabledUpdated(bool enabled);
     event SwapAndEvolve(uint256 bnbSwapped, uint256 tokenReceived, uint256 bnbIntoLiquidity);
 
-    function initialize(address _router, string memory __name, string memory __symbol) public initializer {
-        __Context_init_unchained();
-        __Ownable_init_unchained();
-        __ReflectionToken_v2_init_unchained(_router, __name, __symbol);
-    }
-
-    function __ReflectionToken_v2_init_unchained(address _router, string memory __name, string memory __symbol) internal initializer {
+    constructor(address _router, string memory __name, string memory __symbol) {
         _name = __name;
         _symbol = __symbol;
         _decimals = 9;
@@ -168,9 +162,8 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         numTokensSellToAddToLiquidity = 500 * 10**6 * 10**9;
 
         _burnAddress = 0x000000000000000000000000000000000000dEaD;
-        _initializerAccount = _msgSender();
 
-        _rOwned[_initializerAccount] = _rTotal;
+        _rOwned[owner()] = _rTotal;
 
         uniswapV2Router = IUniswapV2Router02(_router);
         WBNB = uniswapV2Router.WETH();
@@ -181,17 +174,17 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
         //
-        __ReflectionToken_tiers_init();
 
-        emit Transfer(address(0), _msgSender(), _tTotal);
-    }
-
-    function __ReflectionToken_tiers_init() internal initializer {
+        // init feeTiers
         _defaultFees = _addTier(0, 500, 500, 0, 0, address(0), address(0));
         _addTier(50, 50, 100, 0, 0, address(0), address(0));
         _addTier(50, 50, 100, 100, 0, address(0), address(0));
         _addTier(100, 125, 125, 150, 0, address(0), address(0));
+
+        emit Transfer(address(0), _msgSender(), _tTotal);
     }
+
+    // IERC20 functions
 
     function name() public view returns (string memory) {
         return _name;
@@ -258,38 +251,19 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         return true;
     }
 
-    function isExcludedFromReward(address account) public view returns (bool) {
-        return _isExcluded[account];
+    // Reflection functions
+
+    function migrate(address account, uint256 amount)
+    external
+    override
+    preventBlacklisted(account, "ReflectionToken: Migrated account is blacklisted")
+    {
+        require(migration != address(0), "ReflectionToken: Migration is not started");
+        require(_msgSender() == migration, "ReflectionToken: Not Allowed");
+        _migrate(account, amount);
     }
 
-    function totalFees() public view returns (uint256) {
-        return _tFeeTotal;
-    }
-
-    function reflectionFromTokenInTiers(
-        uint256 tAmount,
-        uint256 _tierIndex,
-        bool deductTransferFee
-    ) public view returns (uint256) {
-        require(tAmount <= _tTotal, "Amount must be less than supply");
-        if (!deductTransferFee) {
-            FeeValues memory _values = _getValues(tAmount, _tierIndex);
-            return _values.rAmount;
-        } else {
-            FeeValues memory _values = _getValues(tAmount, _tierIndex);
-            return _values.rTransferAmount;
-        }
-    }
-
-    function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
-        return reflectionFromTokenInTiers(tAmount, 0, deductTransferFee);
-    }
-
-    function tokenFromReflection(uint256 rAmount) public view returns (uint256) {
-        require(rAmount <= _rTotal, "Amount must be less than total reflections");
-        uint256 currentRate = _getRate();
-        return rAmount / currentRate;
-    }
+    // onlyOwner
 
     // we update _rTotalExcluded and _tTotalExcluded when add, remove wallet from excluded list
     // or when increase, decrease exclude value
@@ -336,31 +310,6 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         require(_account != address(0), "ReflectionToken: Invalid address");
         require(_accountsTier[_account] > 0, "ReflectionToken: Account is not in whitelist");
         _accountsTier[_account] = 0;
-    }
-
-    function accountTier(address _account) public view returns (FeeTier memory) {
-        return feeTiers[_accountsTier[_account]];
-    }
-
-    function isWhitelisted(address _account) public view returns (bool) {
-        return _accountsTier[_account] > 0;
-    }
-
-    function checkFees(FeeTier memory _tier) internal view returns (FeeTier memory) {
-        uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee;
-        require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
-
-        return _tier;
-    }
-
-    function checkFeesChanged(
-        FeeTier memory _tier,
-        uint256 _oldFee,
-        uint256 _newFee
-    ) internal view {
-        uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee - _oldFee + _newFee;
-
-        require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
     }
 
     function setEcoSystemFeePercent(uint256 _tierIndex, uint256 _ecoSystemFee)
@@ -450,29 +399,6 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         _addTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner);
     }
 
-    function _addTier(
-        uint256 _ecoSystemFee,
-        uint256 _liquidityFee,
-        uint256 _taxFee,
-        uint256 _ownerFee,
-        uint256 _burnFee,
-        address _ecoSystem,
-        address _owner
-    ) internal returns (FeeTier memory) {
-        FeeTier memory _newTier = checkFees(
-            FeeTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner)
-        );
-        excludeFromReward(_ecoSystem);
-        excludeFromReward(_owner);
-        feeTiers.push(_newTier);
-
-        return _newTier;
-    }
-
-    function feeTier(uint256 _tierIndex) public view checkTierIndex(_tierIndex) returns (FeeTier memory) {
-        return feeTiers[_tierIndex];
-    }
-
     function blacklistAddress(address account) public onlyOwner {
         _isBlacklisted[account] = true;
         _accountsTier[account] = 0;
@@ -502,94 +428,84 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         emit SwapAndEvolveEnabledUpdated(_enabled);
     }
 
-    //to receive BNB from uniswapV2Router when swapping
-    receive() external payable {}
+    function swapAndEvolve() public onlyOwner lockTheSwap {
+        // split the contract balance into halves
+        uint256 contractBnbBalance = address(this).balance;
+        require(contractBnbBalance >= numOfBnbToSwapAndEvolve, "BNB balance is not reach for S&E Threshold");
+
+        contractBnbBalance = numOfBnbToSwapAndEvolve;
+
+        uint256 half = contractBnbBalance / 2;
+        uint256 otherHalf = contractBnbBalance - half;
+
+        // capture the contract's current BNB balance.
+        // this is so that we can capture exactly the amount of BNB that the
+        // swap creates, and not make the liquidity event include any BNB that
+        // has been manually sent to the contract
+        uint256 initialBalance = IReflectionToken(address(this)).balanceOf(msg.sender);
+        // swap BNB for Tokens
+        swapBnbForTokens(half);
+
+        // how much BNB did we just swap into?
+        uint256 newBalance = IReflectionToken(address(this)).balanceOf(msg.sender);
+        uint256 swapeedToken = newBalance - initialBalance;
+
+        _approve(msg.sender, address(this), swapeedToken);
+        require(IReflectionToken(address(this)).transferFrom(msg.sender, address(this), swapeedToken), "transferFrom is failed");
+        // add liquidity to uniswap
+        addLiquidity(swapeedToken, otherHalf);
+        emit SwapAndEvolve(half, swapeedToken, otherHalf);
+    }
+
+    function setMigrationAddress(address _migration) public onlyOwner {
+        migration = _migration;
+    }
+
+    function updateBurnAddress(address _newBurnAddress) external onlyOwner {
+        _burnAddress = _newBurnAddress;
+        excludeFromReward(_newBurnAddress);
+    }
+
+    function withdrawToken(address _token, uint256 _amount) public onlyOwner {
+        require(IReflectionToken(_token).transfer(msg.sender, _amount), "transfer is failed");
+    }
+
+    function setNumberOfTokenToCollectBNB(uint256 _numToken) public onlyOwner {
+        numTokensToCollectBNB = _numToken;
+    }
+
+    function setNumOfBnbToSwapAndEvolve(uint256 _numBnb) public onlyOwner {
+        numOfBnbToSwapAndEvolve = _numBnb;
+    }
+
+    function withdrawBnb(uint256 _amount) public onlyOwner {
+        payable(msg.sender).transfer(_amount);
+    }
+
+    // internal or private
+
+    function _addTier(
+        uint256 _ecoSystemFee,
+        uint256 _liquidityFee,
+        uint256 _taxFee,
+        uint256 _ownerFee,
+        uint256 _burnFee,
+        address _ecoSystem,
+        address _owner
+    ) internal returns (FeeTier memory) {
+        FeeTier memory _newTier = checkFees(
+            FeeTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner)
+        );
+        excludeFromReward(_ecoSystem);
+        excludeFromReward(_owner);
+        feeTiers.push(_newTier);
+
+        return _newTier;
+    }
 
     function _reflectFee(uint256 rFee, uint256 tFee) private {
         _rTotal = _rTotal - rFee;
         _tFeeTotal = _tFeeTotal + tFee;
-    }
-
-    function _getValues(uint256 tAmount, uint256 _tierIndex) private view returns (FeeValues memory) {
-        tFeeValues memory tValues = _getTValues(tAmount, _tierIndex);
-        uint256 tTransferFee = tValues.tLiquidity + tValues.tEchoSystem + tValues.tOwner + tValues.tBurn;
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
-            tAmount,
-            tValues.tFee,
-            tTransferFee,
-            _getRate()
-        );
-        return
-        FeeValues(
-            rAmount,
-            rTransferAmount,
-            rFee,
-            tValues.tTransferAmount,
-            tValues.tEchoSystem,
-            tValues.tLiquidity,
-            tValues.tFee,
-            tValues.tOwner,
-            tValues.tBurn
-        );
-    }
-
-    function _getTValues(uint256 tAmount, uint256 _tierIndex) private view returns (tFeeValues memory) {
-        FeeTier memory tier = feeTiers[_tierIndex];
-        tFeeValues memory tValues = tFeeValues(
-            0,
-            calculateFee(tAmount, tier.ecoSystemFee),
-            calculateFee(tAmount, tier.liquidityFee),
-            calculateFee(tAmount, tier.taxFee),
-            calculateFee(tAmount, tier.ownerFee),
-            calculateFee(tAmount, tier.burnFee)
-        );
-
-        tValues.tTransferAmount = tAmount - tValues.tEchoSystem - tValues.tFee - tValues.tLiquidity - tValues.tOwner - tValues.tBurn;
-
-        return tValues;
-    }
-
-    function _getRValues(
-        uint256 tAmount,
-        uint256 tFee,
-        uint256 tTransferFee,
-        uint256 currentRate
-    )
-    private
-    pure
-    returns (
-        uint256,
-        uint256,
-        uint256
-    )
-    {
-        uint256 rAmount = tAmount * currentRate;
-        uint256 rFee = tFee * currentRate;
-        uint256 rTransferFee = tTransferFee * currentRate;
-        uint256 rTransferAmount = rAmount - rFee - rTransferFee;
-        return (rAmount, rTransferAmount, rFee);
-    }
-
-    function _getRate() private view returns (uint256) {
-        (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
-        return rSupply / tSupply;
-    }
-
-    function _getCurrentSupply() private view returns (uint256, uint256) {
-        if (_rTotalExcluded > _rTotal || _tTotalExcluded > _tTotal) {
-            return (_rTotal, _tTotal);
-        }
-        uint256 rSupply = _rTotal - _rTotalExcluded;
-        uint256 tSupply = _tTotal - _tTotalExcluded;
-
-        if (rSupply < _rTotal / _tTotal) return (_rTotal, _tTotal);
-
-        return (rSupply, tSupply);
-    }
-
-    function calculateFee(uint256 _amount, uint256 _fee) private pure returns (uint256) {
-        if (_fee == 0) return 0;
-        return _amount * _fee / (10**4);
     }
 
     function removeAllFee() private {
@@ -599,14 +515,6 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
 
     function restoreAllFee() private {
         feeTiers[0] = _previousFees;
-    }
-
-    function isExcludedFromFee(address account) public view returns (bool) {
-        return _isExcludedFromFee[account];
-    }
-
-    function isBlacklisted(address account) public view returns (bool) {
-        return _isBlacklisted[account];
     }
 
     function _approve(
@@ -701,35 +609,6 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
             address(this),
             block.timestamp
         );
-    }
-
-    function swapAndEvolve() public onlyOwner lockTheSwap {
-        // split the contract balance into halves
-        uint256 contractBnbBalance = address(this).balance;
-        require(contractBnbBalance >= numOfBnbToSwapAndEvolve, "BNB balance is not reach for S&E Threshold");
-
-        contractBnbBalance = numOfBnbToSwapAndEvolve;
-
-        uint256 half = contractBnbBalance / 2;
-        uint256 otherHalf = contractBnbBalance - half;
-
-        // capture the contract's current BNB balance.
-        // this is so that we can capture exactly the amount of BNB that the
-        // swap creates, and not make the liquidity event include any BNB that
-        // has been manually sent to the contract
-        uint256 initialBalance = IReflectionToken(address(this)).balanceOf(msg.sender);
-        // swap BNB for Tokens
-        swapBnbForTokens(half);
-
-        // how much BNB did we just swap into?
-        uint256 newBalance = IReflectionToken(address(this)).balanceOf(msg.sender);
-        uint256 swapeedToken = newBalance - initialBalance;
-
-        _approve(msg.sender, address(this), swapeedToken);
-        require(IReflectionToken(address(this)).transferFrom(msg.sender, address(this), swapeedToken), "transferFrom is failed");
-        // add liquidity to uniswap
-        addLiquidity(swapeedToken, otherHalf);
-        emit SwapAndEvolve(half, swapeedToken, otherHalf);
     }
 
     function swapBnbForTokens(uint256 bnbAmount) private {
@@ -908,49 +787,75 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         emit Transfer(sender, _burnAddress, _amount);
     }
 
-    function setMigrationAddress(address _migration) public onlyOwner {
-        migration = _migration;
-    }
-
-    function isMigrationStarted() external view override returns (bool) {
-        return migration != address(0);
-    }
-
-    function migrate(address account, uint256 amount)
-    external
-    override
-    preventBlacklisted(account, "ReflectionToken: Migrated account is blacklisted")
-    {
-        require(migration != address(0), "ReflectionToken: Migration is not started");
-        require(_msgSender() == migration, "ReflectionToken: Not Allowed");
-        _migrate(account, amount);
-    }
-
     function _migrate(address account, uint256 amount) private {
         require(account != address(0), "BEP20: mint to the zero address");
 
         _tokenTransfer(_initializerAccount, account, amount, 0, false);
     }
 
+    // Reflection - Read functions
+
+    // external or public
+
+    function isExcludedFromReward(address account) public view returns (bool) {
+        return _isExcluded[account];
+    }
+
+    function totalFees() public view returns (uint256) {
+        return _tFeeTotal;
+    }
+
+    function reflectionFromTokenInTiers(
+        uint256 tAmount,
+        uint256 _tierIndex,
+        bool deductTransferFee
+    ) public view returns (uint256) {
+        require(tAmount <= _tTotal, "Amount must be less than supply");
+        if (!deductTransferFee) {
+            FeeValues memory _values = _getValues(tAmount, _tierIndex);
+            return _values.rAmount;
+        } else {
+            FeeValues memory _values = _getValues(tAmount, _tierIndex);
+            return _values.rTransferAmount;
+        }
+    }
+
+    function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
+        return reflectionFromTokenInTiers(tAmount, 0, deductTransferFee);
+    }
+
+    function tokenFromReflection(uint256 rAmount) public view returns (uint256) {
+        require(rAmount <= _rTotal, "Amount must be less than total reflections");
+        uint256 currentRate = _getRate();
+        return rAmount / currentRate;
+    }
+
+    function accountTier(address _account) public view returns (FeeTier memory) {
+        return feeTiers[_accountsTier[_account]];
+    }
+
+    function isWhitelisted(address _account) public view returns (bool) {
+        return _accountsTier[_account] > 0;
+    }
+
+    function feeTier(uint256 _tierIndex) public view checkTierIndex(_tierIndex) returns (FeeTier memory) {
+        return feeTiers[_tierIndex];
+    }
+
+    function isExcludedFromFee(address account) public view returns (bool) {
+        return _isExcludedFromFee[account];
+    }
+
+    function isBlacklisted(address account) public view returns (bool) {
+        return _isBlacklisted[account];
+    }
+
+    function isMigrationStarted() external view override returns (bool) {
+        return migration != address(0);
+    }
+
     function feeTiersLength() public view returns (uint256) {
         return feeTiers.length;
-    }
-
-    function updateBurnAddress(address _newBurnAddress) external onlyOwner {
-        _burnAddress = _newBurnAddress;
-        excludeFromReward(_newBurnAddress);
-    }
-
-    function withdrawToken(address _token, uint256 _amount) public onlyOwner {
-        require(IReflectionToken(_token).transfer(msg.sender, _amount), "transfer is failed");
-    }
-
-    function setNumberOfTokenToCollectBNB(uint256 _numToken) public onlyOwner {
-        numTokensToCollectBNB = _numToken;
-    }
-
-    function setNumOfBnbToSwapAndEvolve(uint256 _numBnb) public onlyOwner {
-        numOfBnbToSwapAndEvolve = _numBnb;
     }
 
     function getContractBalance() public view returns (uint256) {
@@ -961,7 +866,107 @@ contract ReflectionToken is IReflectionToken, Initializable, ContextUpgradeable,
         return address(this).balance;
     }
 
-    function withdrawBnb(uint256 _amount) public onlyOwner {
-        payable(msg.sender).transfer(_amount);
+    // internal or private
+
+    function _getRate() private view returns (uint256) {
+        (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
+        return rSupply / tSupply;
     }
+
+    function _getCurrentSupply() private view returns (uint256, uint256) {
+        if (_rTotalExcluded > _rTotal || _tTotalExcluded > _tTotal) {
+            return (_rTotal, _tTotal);
+        }
+        uint256 rSupply = _rTotal - _rTotalExcluded;
+        uint256 tSupply = _tTotal - _tTotalExcluded;
+
+        if (rSupply < _rTotal / _tTotal) return (_rTotal, _tTotal);
+
+        return (rSupply, tSupply);
+    }
+
+    function calculateFee(uint256 _amount, uint256 _fee) private pure returns (uint256) {
+        if (_fee == 0) return 0;
+        return _amount * _fee / (10**4);
+    }
+
+    function _getRValues(
+        uint256 tAmount,
+        uint256 tFee,
+        uint256 tTransferFee,
+        uint256 currentRate
+    )
+    private
+    pure
+    returns (
+        uint256,
+        uint256,
+        uint256
+    )
+    {
+        uint256 rAmount = tAmount * currentRate;
+        uint256 rFee = tFee * currentRate;
+        uint256 rTransferFee = tTransferFee * currentRate;
+        uint256 rTransferAmount = rAmount - rFee - rTransferFee;
+        return (rAmount, rTransferAmount, rFee);
+    }
+
+    function _getValues(uint256 tAmount, uint256 _tierIndex) private view returns (FeeValues memory) {
+        tFeeValues memory tValues = _getTValues(tAmount, _tierIndex);
+        uint256 tTransferFee = tValues.tLiquidity + tValues.tEchoSystem + tValues.tOwner + tValues.tBurn;
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
+            tAmount,
+            tValues.tFee,
+            tTransferFee,
+            _getRate()
+        );
+        return
+        FeeValues(
+            rAmount,
+            rTransferAmount,
+            rFee,
+            tValues.tTransferAmount,
+            tValues.tEchoSystem,
+            tValues.tLiquidity,
+            tValues.tFee,
+            tValues.tOwner,
+            tValues.tBurn
+        );
+    }
+
+    function _getTValues(uint256 tAmount, uint256 _tierIndex) private view returns (tFeeValues memory) {
+        FeeTier memory tier = feeTiers[_tierIndex];
+        tFeeValues memory tValues = tFeeValues(
+            0,
+            calculateFee(tAmount, tier.ecoSystemFee),
+            calculateFee(tAmount, tier.liquidityFee),
+            calculateFee(tAmount, tier.taxFee),
+            calculateFee(tAmount, tier.ownerFee),
+            calculateFee(tAmount, tier.burnFee)
+        );
+
+        tValues.tTransferAmount = tAmount - tValues.tEchoSystem - tValues.tFee - tValues.tLiquidity - tValues.tOwner - tValues.tBurn;
+
+        return tValues;
+    }
+
+    function checkFees(FeeTier memory _tier) internal view returns (FeeTier memory) {
+        uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee;
+        require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
+
+        return _tier;
+    }
+
+    function checkFeesChanged(
+        FeeTier memory _tier,
+        uint256 _oldFee,
+        uint256 _newFee
+    ) internal view {
+        uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee - _oldFee + _newFee;
+
+        require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
+    }
+
+    //to receive BNB from uniswapV2Router when swapping
+    receive() external payable {}
 }
