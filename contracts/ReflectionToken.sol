@@ -75,7 +75,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     uint256 public numTokensToCollectETH;
     uint256 public numOfETHToSwapAndEvolve;
 
-    uint256 public maxTxAmount;
+    uint256 public maxTxAmount = 1000;
 //    uint256 private _numTokensSellToAddToLiquidity;
     
     uint256 private _rTotalExcluded;
@@ -141,9 +141,11 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _symbol = __symbol;
         _decimals = 9;
 
-        _tTotal = 1000000 * 10**6 * 10**9;
-        _rTotal = (MAX - (MAX % _tTotal));
-        _maxFee = 1000;
+        uint tTotal = 1000000 * 10**6 * 10**9;
+        uint rTotal = (MAX - (MAX % tTotal));
+
+        _tTotal = tTotal;
+        _rTotal = rTotal;
 
         // swapAndLiquifyEnabled = true;
 
@@ -152,7 +154,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
         burnAddress = 0x000000000000000000000000000000000000dEaD;
 
-        _rOwned[owner()] = _rTotal;
+        address ownerAddress = owner();
+        _rOwned[ownerAddress] = rTotal;
 
         uniswapV2Router = IUniswapV2Router02(_router);
         WETH = uniswapV2Router.WETH();
@@ -160,7 +163,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory()).createPair(address(this), WETH);
 
         //exclude owner and this contract from fee
-        _isExcludedFromFee[owner()] = true;
+        _isExcludedFromFee[ownerAddress] = true;
         _isExcludedFromFee[address(this)] = true;
         //
 
@@ -170,7 +173,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _addTier(50, 50, 100, 100, 0, address(0), address(0));
         _addTier(100, 125, 125, 150, 0, address(0), address(0));
 
-        emit Transfer(address(0), _msgSender(), _tTotal);
+        emit Transfer(address(0), msg.sender, tTotal);
     }
 
     // IERC20 functions
@@ -197,7 +200,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     }
 
     function transfer(address recipient, uint256 amount) public override returns (bool) {
-        _transfer(_msgSender(), recipient, amount);
+        _transfer(msg.sender, recipient, amount);
         return true;
     }
 
@@ -206,7 +209,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     }
 
     function approve(address spender, uint256 amount) public override returns (bool) {
-        _approve(_msgSender(), spender, amount);
+        _approve(msg.sender, spender, amount);
         return true;
     }
 
@@ -215,27 +218,27 @@ contract ReflectionToken is IReflectionToken, Ownable {
         address recipient,
         uint256 amount
     ) public override returns (bool) {
-        require(_allowances[sender][_msgSender()] >= amount, "BEP20: transfer amount exceeds allowance");
+        require(_allowances[sender][msg.sender] >= amount, "ERC20: transfer amount exceeds allowance");
         _transfer(sender, recipient, amount);
         _approve(
             sender,
-            _msgSender(),
-            _allowances[sender][_msgSender()] - amount
+                msg.sender,
+            _allowances[sender][msg.sender] - amount
         );
         return true;
     }
 
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
+        _approve(msg.sender, spender, _allowances[msg.sender][spender] + addedValue);
         return true;
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        require(_allowances[_msgSender()][spender] >= subtractedValue, "BEP20: decreased allowance below zero");
+        require(_allowances[msg.sender][spender] >= subtractedValue, "ERC20: decreased allowance below zero");
         _approve(
-            _msgSender(),
+            msg.sender,
             spender,
-            _allowances[_msgSender()][spender] - subtractedValue
+            _allowances[msg.sender][spender] - subtractedValue
         );
         return true;
     }
@@ -248,7 +251,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     preventBlacklisted(account, "ReflectionToken: Migrated account is blacklisted")
     {
         require(migration != address(0), "ReflectionToken: Migration is not started");
-        require(_msgSender() == migration, "ReflectionToken: Not Allowed");
+        require(msg.sender == migration, "ReflectionToken: Not Allowed");
         _migrate(account, amount);
     }
 
@@ -476,7 +479,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
     }
 
     function withdrawETH(uint256 _amount) public onlyOwner {
-        payable(msg.sender).transfer(_amount);
+        (bool sent, ) = payable(msg.sender).call{value: (_amount)}("");
+        require(sent, "transfer is failed");
     }
 
     // internal or private
@@ -523,8 +527,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
     preventBlacklisted(owner, "ReflectionToken: Owner address is blacklisted")
     preventBlacklisted(spender, "ReflectionToken: Spender address is blacklisted")
     {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -536,13 +540,13 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uint256 amount
     )
     private
-    preventBlacklisted(_msgSender(), "ReflectionToken: Address is blacklisted")
+    preventBlacklisted(msg.sender, "ReflectionToken: Address is blacklisted")
     preventBlacklisted(from, "ReflectionToken: From address is blacklisted")
     preventBlacklisted(to, "ReflectionToken: To address is blacklisted")
-    isRouter(_msgSender())
+    isRouter(msg.sender)
     {
-        require(from != address(0), "BEP20: transfer from the zero address");
-        require(to != address(0), "BEP20: transfer to the zero address");
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
 
         if (from != owner() && to != owner())
@@ -577,8 +581,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
         if (takeFee) {
             tierIndex = _accountsTier[from];
 
-            if (_msgSender() != from) {
-                tierIndex = _accountsTier[_msgSender()];
+            if (msg.sender != from) {
+                tierIndex = _accountsTier[msg.sender];
             }
         }
 
@@ -786,7 +790,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     }
 
     function _migrate(address account, uint256 amount) private {
-        require(account != address(0), "BEP20: mint to the zero address");
+        require(account != address(0), "ERC20: mint to the zero address");
 
         _tokenTransfer(owner(), account, amount, 0, false);
     }
