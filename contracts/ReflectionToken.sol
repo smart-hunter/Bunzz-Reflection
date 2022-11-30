@@ -1,6 +1,5 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
-pragma experimental ABIEncoderV2;
 
 import "./interfaces/IReflectionToken.sol";
 import "./interfaces/IUniswapV2Factory.sol";
@@ -75,19 +74,16 @@ contract ReflectionToken is IReflectionToken, Ownable {
     uint256 public numTokensToCollectETH;
     uint256 public numOfETHToSwapAndEvolve;
 
-    uint256 public maxTxAmount = 1000;
-//    uint256 private _numTokensSellToAddToLiquidity;
-    
+    uint256 public maxTxAmount;
+
     uint256 private _rTotalExcluded;
     uint256 private _tTotalExcluded;
 
     uint8 private _decimals;
 
     bool public inSwapAndLiquify;
-    //    bool public swapAndLiquifyEnabled;
     bool private _upgraded;
 
-//    bool inSwapAndEvolve;
     bool public swapAndEvolveEnabled;
 
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
@@ -147,10 +143,9 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _tTotal = tTotal;
         _rTotal = rTotal;
 
-        // swapAndLiquifyEnabled = true;
+        _maxFee = 10000;
 
         maxTxAmount = 5000 * 10**6 * 10**9;
-        // _numTokensSellToAddToLiquidity = 500 * 10**6 * 10**9;
 
         burnAddress = 0x000000000000000000000000000000000000dEaD;
 
@@ -165,7 +160,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         //exclude owner and this contract from fee
         _isExcludedFromFee[ownerAddress] = true;
         _isExcludedFromFee[address(this)] = true;
-        //
+
 
         // init _feeTiers
         defaultFees = _addTier(0, 500, 500, 0, 0, address(0), address(0));
@@ -497,8 +492,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
         FeeTier memory _newTier = _checkFees(
             FeeTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner)
         );
-        excludeFromReward(_ecoSystem);
-        excludeFromReward(_owner);
+        if (!_isExcluded[_ecoSystem]) excludeFromReward(_ecoSystem);
+        if (!_isExcluded[_owner]) excludeFromReward(_owner);
         _feeTiers.push(_newTier);
 
         return _newTier;
