@@ -587,38 +587,38 @@ struct type
 ```
 Storage variables
 
-| name                          |                          type                           | description         |
-|:------------------------------|:-------------------------------------------------------:|:--------------------|
-| _rOwned                       |           mapping(address => uint256) private           | value by reflection |
-| _tOwned                       |           mapping(address => uint256) private           | value in general    |
-| _allowances                   | mapping(address => mapping(address => uint256)) private | allowances          |
-| _isExcludedFromFee            |            mapping(address => bool) private             |                     |
-| _isExcluded                   |            mapping(address => bool) private             |                     |
-| _isBlacklisted                |            mapping(address => bool) private             |                     |
-| __accountsTier                |           mapping(address => uint256) private           |                     |
-| _MAX                          |                uint256 private constant                 |                     |
-| _tTotal                       |                     uint256 private                     |                     |
-| _rTotal                       |                     uint256 private                     |                     |
-| _tFeeTotal                    |                     uint256 private                     |                     |
-| _maxFee                       |                     uint256 private                     |                     |
-| _name                         |                     string private                      |                     |
-| _symbol                       |                     string private                      |                     |
-| defaultFees                   |                     FeeTier public                      |                     |
-| _previousFees                 |                     FeeTier public                      |                     |
-| _emptyFees                    |                     FeeTier public                      |                     |
-| _feeTiers                     |                    FeeTier[] private                    |                     |
-| uniswapV2Router               |                IUniswapV2Router02 public                |                     |
-| uniswapV2Pair                 |                     address public                      |                     |
-| WETH                          |                     address public                      |                     |
-| migration                     |                     address private                     |                     |
-| burnAddress                   |                     address public                      |                     |
-| numTokensToCollectETH         |                     uint256 public                      |                     |
-| numOfETHToSwapAndEvolve       |                     uint256 public                      |                     |
-| maxTxAmount                   |                     uint256 public                      |                     |
-| _rTotalExcluded               |                     uint256 private                     |                     |
-| _tTotalExcluded               |                     uint256 private                     |                     |
-| _decimals                     |                      uint8 private                      |                     |
-| inSwapAndLiquify              |                          bool                           |                     |
-| _upgraded                     |                      bool private                       |                     |
-| swapAndEvolveEnabled          |                       bool public                       |                     |
+| name                         |                          type                           | description         |
+|:-----------------------------|:-------------------------------------------------------:|:--------------------|
+| _rOwned                      |           mapping(address => uint256) private           | value by reflection |
+| _tOwned                      |           mapping(address => uint256) private           | value in general    |
+| _allowances                  | mapping(address => mapping(address => uint256)) private | allowances          |
+| _isExcludedFromFee           |            mapping(address => bool) private             |                     |
+| _isExcluded                  |            mapping(address => bool) private             |                     |
+| _isBlacklisted               |            mapping(address => bool) private             |                     |
+| __accountsTier               |           mapping(address => uint256) private           |                     |
+| _MAX                         |                uint256 private constant                 |                     |
+| _tTotal                      |                     uint256 private                     |                     |
+| _rTotal                      |                     uint256 private                     |                     |
+| _tFeeTotal                   |                     uint256 private                     |                     |
+| maxFee                       |                     uint256 public                      |                     |
+| _name                        |                     string private                      |                     |
+| _symbol                      |                     string private                      |                     |
+| defaultFees                  |                     FeeTier public                      |                     |
+| _previousFees                |                     FeeTier public                      |                     |
+| _emptyFees                   |                     FeeTier public                      |                     |
+| _feeTiers                    |                    FeeTier[] private                    |                     |
+| uniswapV2Router              |                IUniswapV2Router02 public                |                     |
+| uniswapV2Pair                |                     address public                      |                     |
+| WETH                         |                     address public                      |                     |
+| migration                    |                     address private                     |                     |
+| burnAddress                  |                     address public                      |                     |
+| numTokensToCollectETH        |                     uint256 public                      |                     |
+| numOfETHToSwapAndEvolve      |                     uint256 public                      |                     |
+| maxTxAmount                  |                     uint256 public                      |                     |
+| _rTotalExcluded              |                     uint256 private                     |                     |
+| _tTotalExcluded              |                     uint256 private                     |                     |
+| _decimals                    |                      uint8 private                      |                     |
+| inSwapAndLiquify             |                          bool                           |                     |
+| _upgraded                    |                      bool private                       |                     |
+| swapAndEvolveEnabled         |                       bool public                       |                     |
 

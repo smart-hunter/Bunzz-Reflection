@@ -10,7 +10,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 contract ReflectionToken is IReflectionToken, Ownable {
-
     struct FeeTier {
         uint256 ecoSystemFee;
         uint256 liquidityFee;
@@ -54,7 +53,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     uint256 private _tTotal;
     uint256 private _rTotal;
     uint256 private _tFeeTotal;
-    uint256 private _maxFee;
+    uint256 public maxFee;
 
     string private _name = "ReflectionToken";
     string private _symbol = "RFT";
@@ -143,7 +142,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _tTotal = tTotal;
         _rTotal = rTotal;
 
-        _maxFee = 10000;
+        maxFee = 1000;
 
         maxTxAmount = 5000 * 10**6 * 10**9;
 
@@ -163,9 +162,14 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
 
         // init _feeTiers
+
+        // liquidityFee, taxFee
         defaultFees = _addTier(0, 500, 500, 0, 0, address(0), address(0));
+        // ecoSystemFee, liquidityFee, taxFee
         _addTier(50, 50, 100, 0, 0, address(0), address(0));
+        // ecoSystemFee, liquidityFee, taxFee, ownerFee
         _addTier(50, 50, 100, 100, 0, address(0), address(0));
+        // ecoSystemFee, liquidityFee, taxFee, ownerFee
         _addTier(100, 125, 125, 150, 0, address(0), address(0));
 
         emit Transfer(address(0), msg.sender, tTotal);
@@ -254,8 +258,12 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     // we update _rTotalExcluded and _tTotalExcluded when add, remove wallet from excluded list
     // or when increase, decrease exclude value
-    function excludeFromReward(address account) public onlyOwner {
+    function excludeFromReward(address account) external onlyOwner {
         require(!_isExcluded[account], "Account is already excluded");
+        _excludeFromReward(account);
+    }
+
+    function _excludeFromReward(address account) private {
         if (_rOwned[account] > 0) {
             _tOwned[account] = tokenFromReflection(_rOwned[account]);
             _tTotalExcluded = _tTotalExcluded + _tOwned[account];
@@ -369,7 +377,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     checkTierIndex(_tierIndex)
     {
         require(_ecoSystem != address(0), "ReflectionToken: Address Zero is not allowed");
-        excludeFromReward(_ecoSystem);
+        if (!_isExcluded[_ecoSystem]) _excludeFromReward(_ecoSystem);
         _feeTiers[_tierIndex].ecoSystem = _ecoSystem;
         if (_tierIndex == 0) {
             defaultFees.ecoSystem = _ecoSystem;
@@ -378,7 +386,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     function setOwnerFeeAddress(uint256 _tierIndex, address _owner) external onlyOwner checkTierIndex(_tierIndex) {
         require(_owner != address(0), "ReflectionToken: Address Zero is not allowed");
-        excludeFromReward(_owner);
+        if (!_isExcluded[_owner]) _excludeFromReward(_owner);
         _feeTiers[_tierIndex].owner = _owner;
         if (_tierIndex == 0) {
             defaultFees.owner = _owner;
@@ -404,7 +412,6 @@ contract ReflectionToken is IReflectionToken, Ownable {
     }
 
     function setDefaultSettings() external onlyOwner {
-//        swapAndLiquifyEnabled = false;
         swapAndEvolveEnabled = true;
     }
 
@@ -456,7 +463,9 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     function updateBurnAddress(address _newBurnAddress) external onlyOwner {
         burnAddress = _newBurnAddress;
-        excludeFromReward(_newBurnAddress);
+        if (!_isExcluded[_newBurnAddress]) {
+            _excludeFromReward(_newBurnAddress);
+        }
     }
 
     function setNumberOfTokenToCollectETH(uint256 _numToken) public onlyOwner {
@@ -492,8 +501,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
         FeeTier memory _newTier = _checkFees(
             FeeTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner)
         );
-        if (!_isExcluded[_ecoSystem]) excludeFromReward(_ecoSystem);
-        if (!_isExcluded[_owner]) excludeFromReward(_owner);
+        if (!_isExcluded[_ecoSystem]) _excludeFromReward(_ecoSystem);
+        if (!_isExcluded[_owner]) _excludeFromReward(_owner);
         _feeTiers.push(_newTier);
 
         return _newTier;
@@ -546,23 +555,19 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
         if (from != owner() && to != owner())
             require(amount <= maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
-
         // is the token balance of this contract address over the min number of
         // tokens that we need to initiate a swap + liquidity lock?
         // also, don't get caught in a circular liquidity event.
         // also, don't swap & liquify if sender is uniswap pair.
         uint256 contractTokenBalance = balanceOf(address(this));
-
         if (contractTokenBalance >= maxTxAmount) {
             contractTokenBalance = maxTxAmount;
         }
-
         bool overMinTokenBalance = contractTokenBalance >= numTokensToCollectETH;
         if (overMinTokenBalance && !inSwapAndLiquify && from != uniswapV2Pair && swapAndEvolveEnabled) {
             contractTokenBalance = numTokensToCollectETH;
             _collectETH(contractTokenBalance);
         }
-
         //indicates if fee should be deducted from transfer
         bool takeFee = true;
 
@@ -570,9 +575,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
             takeFee = false;
         }
-
         uint256 tierIndex = 0;
-
         if (takeFee) {
             tierIndex = _accountsTier[from];
 
@@ -580,7 +583,6 @@ contract ReflectionToken is IReflectionToken, Ownable {
                 tierIndex = _accountsTier[msg.sender];
             }
         }
-
         //transfer amount, it will take tax, burn, liquidity fee
         _tokenTransfer(from, to, amount, tierIndex, takeFee);
     }
@@ -594,9 +596,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         address[] memory path = new address[](2);
         path[0] = address(this);
         path[1] = uniswapV2Router.WETH();
-
         _approve(address(this), address(uniswapV2Router), tokenAmount);
-
         // make the swap
         uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
@@ -949,7 +949,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     function _checkFees(FeeTier memory _tier) internal view returns (FeeTier memory) {
         uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee;
-        require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
+        require(_fees <= maxFee, "ReflectionToken: Fees exceeded max limitation");
 
         return _tier;
     }
@@ -961,7 +961,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     ) internal view {
         uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee - _oldFee + _newFee;
 
-        require(_fees <= _maxFee, "ReflectionToken: Fees exceeded max limitation");
+        require(_fees <= maxFee, "ReflectionToken: Fees exceeded max limitation");
     }
 
     //to receive ETH from uniswapV2Router when swapping
